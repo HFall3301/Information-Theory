@@ -14,7 +14,6 @@ pub fn encrypt_decimation(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
-    // Фильтруем ключ - оставляем только цифры
     let filtered_key: String = key.chars()
         .filter(|c| c.is_ascii_digit())
         .collect();
@@ -65,7 +64,6 @@ pub fn decrypt_decimation(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
-    // Фильтруем ключ - оставляем только цифры
     let filtered_key: String = key.chars()
         .filter(|c| c.is_ascii_digit())
         .collect();
@@ -120,7 +118,6 @@ pub fn encrypt_vigenere_ru(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
-    // Фильтруем ключ - оставляем только русские буквы
     let clean_key: String = key
         .chars()
         .filter(|c| {
@@ -185,7 +182,6 @@ pub fn decrypt_vigenere_ru(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
-    // Фильтруем ключ - оставляем только русские буквы
     let clean_key: String = key
         .chars()
         .filter(|c| {
