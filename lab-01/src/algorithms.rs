@@ -1,5 +1,6 @@
 use crate::alphabet::*;
 use std::num::ParseIntError;
+
 fn gcd(mut a: i32, mut b: i32) -> i32 {
     while b != 0 {
         let temp = b;
@@ -8,12 +9,21 @@ fn gcd(mut a: i32, mut b: i32) -> i32 {
     }
     a.abs()
 }
+
 pub fn encrypt_decimation(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
+    // Фильтруем ключ - оставляем только цифры
+    let filtered_key: String = key.chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
 
-    let step: i32 = parse_key_number(key)?;
+    if filtered_key.is_empty() {
+        return Err("Ключ должен содержать цифры.".into());
+    }
+
+    let step: i32 = parse_key_number(&filtered_key)?;
 
     if gcd(ENGLISH_LEN, step) != 1 {
         return Err(format!(
@@ -50,12 +60,21 @@ pub fn encrypt_decimation(
 
     Ok(result)
 }
+
 pub fn decrypt_decimation(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
+    // Фильтруем ключ - оставляем только цифры
+    let filtered_key: String = key.chars()
+        .filter(|c| c.is_ascii_digit())
+        .collect();
 
-    let step: i32 = parse_key_number(key)?;
+    if filtered_key.is_empty() {
+        return Err("Ключ должен содержать цифры.".into());
+    }
+
+    let step: i32 = parse_key_number(&filtered_key)?;
 
     if gcd(ENGLISH_LEN, step) != 1 {
         return Err(format!(
@@ -96,16 +115,17 @@ pub fn decrypt_decimation(
 
     Ok(result)
 }
+
 pub fn encrypt_vigenere_ru(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
+    // Фильтруем ключ - оставляем только русские буквы
     let clean_key: String = key
         .chars()
         .filter(|c| {
-            RUSSIAN_ALPHABET.contains(
-                c.to_lowercase().next().unwrap_or(*c)
-            )
+            let lower = c.to_lowercase().next().unwrap_or(*c);
+            RUSSIAN_ALPHABET.contains(lower)
         })
         .collect();
 
@@ -131,9 +151,9 @@ pub fn encrypt_vigenere_ru(
                 let key_pos = position(key_lower, RUSSIAN_ALPHABET)
                     .expect("Ключ содержит только русские буквы");
 
-                 println!("Шифруем: '{}' (поз={}) с ключом '{}' (поз={}) -> new_pos={}",
-                    lower_c, pos, key_lower, key_pos,
-                    (pos as i32 + key_pos as i32).rem_euclid(RUSSIAN_LEN));
+                println!("Шифруем: '{}' (поз={}) с ключом '{}' (поз={}) -> new_pos={}",
+                         lower_c, pos, key_lower, key_pos,
+                         (pos as i32 + key_pos as i32).rem_euclid(RUSSIAN_LEN));
 
                 let new_pos = (pos as i32 + key_pos as i32)
                     .rem_euclid(RUSSIAN_LEN) as usize;
@@ -165,12 +185,12 @@ pub fn decrypt_vigenere_ru(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
+    // Фильтруем ключ - оставляем только русские буквы
     let clean_key: String = key
         .chars()
         .filter(|c| {
-            RUSSIAN_ALPHABET.contains(
-                c.to_lowercase().next().unwrap_or(*c)
-            )
+            let lower = c.to_lowercase().next().unwrap_or(*c);
+            RUSSIAN_ALPHABET.contains(lower)
         })
         .collect();
 
@@ -196,9 +216,9 @@ pub fn decrypt_vigenere_ru(
                 let key_pos = position(key_lower, RUSSIAN_ALPHABET)
                     .expect("Ключ содержит только русские буквы");
 
-                 println!("Расшифровываем: '{}' (поз={}) с ключом '{}' (поз={}) -> new_pos={}",
-                    lower_c, pos, key_lower, key_pos,
-                    (pos as i32 - key_pos as i32).rem_euclid(RUSSIAN_LEN));
+                println!("Расшифровываем: '{}' (поз={}) с ключом '{}' (поз={}) -> new_pos={}",
+                         lower_c, pos, key_lower, key_pos,
+                         (pos as i32 - key_pos as i32).rem_euclid(RUSSIAN_LEN));
 
                 let new_pos = (pos as i32 - key_pos as i32)
                     .rem_euclid(RUSSIAN_LEN) as usize;
@@ -225,6 +245,7 @@ pub fn decrypt_vigenere_ru(
 
     Ok(result)
 }
+
 fn parse_key_number(key: &str) -> Result<i32, String> {
     key.trim()
         .parse::<i32>()
@@ -232,6 +253,7 @@ fn parse_key_number(key: &str) -> Result<i32, String> {
             "Ключ должен быть целым числом.".into()
         })
 }
+
 fn mod_inverse(a: i32, m: i32) -> Option<i32> {
     (1..m).find(|x| (a * x) % m == 1)
 }
