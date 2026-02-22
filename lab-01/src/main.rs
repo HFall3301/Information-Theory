@@ -1,5 +1,5 @@
+#![windows_subsystem = "windows"]
 use eframe::egui;
-use egui::{Align, Layout};
 use rfd::FileDialog;
 use std::fs;
 
@@ -33,12 +33,6 @@ impl Default for CipherApp {
 }
 
 impl CipherApp {
-    fn clear_fields(&mut self) {
-        self.key_input.clear();
-        self.input_text.clear();
-        self.output_text.clear();
-    }
-
     fn encrypt_action(&mut self) {
         if self.key_input.trim().is_empty() {
             self.error_message = Some("Введите ключ.".into());
@@ -134,88 +128,108 @@ impl eframe::App for CipherApp {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.horizontal(|ui| {
-                // Левая часть
-                ui.vertical(|ui| {
+
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+
                     ui.label("Ключ:");
-                    ui.text_edit_singleline(&mut self.key_input);
-
-                    ui.add_space(10.0);
-
-                    ui.label("Исходный текст:");
                     ui.add(
-                        egui::TextEdit::multiline(&mut self.input_text)
-                            .desired_rows(6)
+                        egui::TextEdit::singleline(&mut self.key_input)
+                            .desired_width(f32::INFINITY)
                     );
+
                     ui.add_space(10.0);
 
-                    ui.label("Результат:");
-                    ui.add_enabled(
-                        false,
-                        egui::TextEdit::multiline(
-                            &mut self.output_text,
-                        )
-                            .desired_rows(6),
-                    );
+                    // ===== Исходный текст =====
+                    ui.collapsing("Исходный текст", |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.input_text)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(15)
+                        );
+                    });
+
+                    ui.add_space(10.0);
+
+                    ui.collapsing("Результат", |ui| {
+                        ui.add(
+                            egui::TextEdit::multiline(&mut self.output_text)
+                                .desired_width(f32::INFINITY)
+                                .desired_rows(15)
+                                .interactive(false)
+                        );
+                    });
+
+                    ui.add_space(15.0);
+
+                    ui.separator();
+
+                    ui.heading("Алгоритм");
+
+                    if ui.radio_value(
+                        &mut self.selected_algorithm,
+                        EncryptionAlgorithm::DecimationEnglish,
+                        "Метод децимации (английский)",
+                    ).clicked() {
+                        self.output_text.clear();
+                    }
+
+                    if ui.radio_value(
+                        &mut self.selected_algorithm,
+                        EncryptionAlgorithm::VigenereRussian,
+                        "Виженер (русский)",
+                    ).clicked() {
+                        self.output_text.clear();
+                    }
+
+                    ui.add_space(20.0);
+
+                    ui.horizontal(|ui| {
+                        if ui.button("Зашифровать").clicked() {
+                            self.encrypt_action();
+                        }
+
+                        if ui.button("Расшифровать").clicked() {
+                            self.decrypt_action();
+                        }
+                    });
                 });
-
-                ui.add_space(40.0);
-
-                ui.vertical(|ui| {
-                    ui.heading("Алгоритм:");
-
-                    if ui
-                        .radio_value(
-                            &mut self.selected_algorithm,
-                            EncryptionAlgorithm::DecimationEnglish,
-                            "Метод децимации (английский)",
-                        )
-                        .clicked()
-                    {
-                        self.clear_fields();
-                    }
-
-                    if ui
-                        .radio_value(
-                            &mut self.selected_algorithm,
-                            EncryptionAlgorithm::VigenereRussian,
-                            "Виженер (русский, прямой ключ)",
-                        )
-                        .clicked()
-                    {
-                        self.clear_fields();
-                    }
-                });
-            });
-
-            ui.add_space(20.0);
-
-            ui.with_layout(
-                Layout::left_to_right(Align::Center),
-                |ui| {
-                    if ui.button("Зашифровать").clicked() {
-                        self.encrypt_action();
-                    }
-
-                    if ui.button("Расшифровать").clicked() {
-                        self.decrypt_action();
-                    }
-                },
-            );
         });
 
-        if self.error_message.is_some() {
-            let error_text = self.error_message.clone().unwrap();
+        if let Some(error_text) = self.error_message.clone() {
             let mut clear_error = false;
 
             egui::Window::new("Ошибка")
                 .collapsible(false)
                 .resizable(false)
+                .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
+                .fixed_size([420.0, 180.0])
                 .show(ctx, |ui| {
-                    ui.label(error_text);
-                    if ui.button("OK").clicked() {
-                        clear_error = true;
-                    }
+                    ui.vertical_centered(|ui| {
+                        ui.add_space(10.0);
+
+                        ui.heading("⚠ Ошибка");
+
+                        ui.add_space(10.0);
+
+                        ui.label(
+                            egui::RichText::new(error_text)
+                                .size(18.0)
+                        );
+
+                        ui.add_space(20.0);
+
+                        if ui
+                            .add_sized(
+                                [120.0, 35.0],
+                                egui::Button::new("OK"),
+                            )
+                            .clicked()
+                        {
+                            clear_error = true;
+                        }
+                    });
                 });
 
             if clear_error {
@@ -224,7 +238,6 @@ impl eframe::App for CipherApp {
         }
     }
 }
-
 fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

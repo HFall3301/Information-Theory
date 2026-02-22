@@ -12,6 +12,7 @@ pub fn encrypt_decimation(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
+
     let step: i32 = parse_key_number(key)?;
 
     if gcd(ENGLISH_LEN, step) != 1 {
@@ -21,26 +22,29 @@ pub fn encrypt_decimation(
         ));
     }
 
-    let filtered = filter_english(text);
-
-    let result: String = filtered
+    let result: String = text
         .chars()
         .map(|c| {
-            let is_upper = c.is_uppercase();
-            let lower = c.to_ascii_lowercase();
-            let pos = position(lower, ENGLISH_ALPHABET).unwrap() as i32;
+            if let Some(pos) = position(
+                c.to_ascii_lowercase(),
+                ENGLISH_ALPHABET,
+            ) {
+                let is_upper = c.is_uppercase();
+                let new_pos =
+                    (pos as i32 * step)
+                        .rem_euclid(ENGLISH_LEN) as usize;
 
-            let new_pos =
-                (pos * step).rem_euclid(ENGLISH_LEN) as usize;
+                let mut new_char =
+                    ENGLISH_ALPHABET.chars().nth(new_pos).unwrap();
 
-            let mut new_char =
-                ENGLISH_ALPHABET.chars().nth(new_pos).unwrap();
+                if is_upper {
+                    new_char = new_char.to_ascii_uppercase();
+                }
 
-            if is_upper {
-                new_char = new_char.to_ascii_uppercase();
+                new_char
+            } else {
+                c
             }
-
-            new_char
         })
         .collect();
 
@@ -50,6 +54,7 @@ pub fn decrypt_decimation(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
+
     let step: i32 = parse_key_number(key)?;
 
     if gcd(ENGLISH_LEN, step) != 1 {
@@ -59,29 +64,33 @@ pub fn decrypt_decimation(
         ));
     }
 
-    let inverse = mod_inverse(step, ENGLISH_LEN)
-        .ok_or("Не существует обратного элемента.")?;
+    let inverse =
+        mod_inverse(step, ENGLISH_LEN)
+            .ok_or("Нет обратного элемента.")?;
 
-    let filtered = filter_english(text);
-
-    let result: String = filtered
+    let result: String = text
         .chars()
         .map(|c| {
-            let is_upper = c.is_uppercase();
-            let lower = c.to_ascii_lowercase();
-            let pos = position(lower, ENGLISH_ALPHABET).unwrap() as i32;
+            if let Some(pos) = position(
+                c.to_ascii_lowercase(),
+                ENGLISH_ALPHABET,
+            ) {
+                let is_upper = c.is_uppercase();
+                let new_pos =
+                    (pos as i32 * inverse)
+                        .rem_euclid(ENGLISH_LEN) as usize;
 
-            let new_pos =
-                (pos * inverse).rem_euclid(ENGLISH_LEN) as usize;
+                let mut new_char =
+                    ENGLISH_ALPHABET.chars().nth(new_pos).unwrap();
 
-            let mut new_char =
-                ENGLISH_ALPHABET.chars().nth(new_pos).unwrap();
+                if is_upper {
+                    new_char = new_char.to_ascii_uppercase();
+                }
 
-            if is_upper {
-                new_char = new_char.to_ascii_uppercase();
+                new_char
+            } else {
+                c
             }
-
-            new_char
         })
         .collect();
 
@@ -91,87 +100,126 @@ pub fn encrypt_vigenere_ru(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
-    let filtered = filter_russian(text);
-    let clean_key = filter_russian(key);
+    let clean_key: String = key
+        .chars()
+        .filter(|c| {
+            RUSSIAN_ALPHABET.contains(
+                c.to_lowercase().next().unwrap_or(*c)
+            )
+        })
+        .collect();
 
     if clean_key.is_empty() {
         return Err("Ключ должен содержать русские буквы.".into());
     }
 
-    let result: String = filtered
+    let key_chars: Vec<char> = clean_key.chars().collect();
+    let key_len = key_chars.len();
+    let mut key_index = 0;
+
+    let result: String = text
         .chars()
-        .enumerate()
-        .map(|(i, c)| {
-            let is_upper = c.is_uppercase();
-            let lower = c.to_lowercase().next().unwrap();
+        .map(|c| {
+            let lower_c = c.to_lowercase().next().unwrap();
 
-            let text_pos =
-                position(lower, RUSSIAN_ALPHABET).unwrap() as i32;
+            if let Some(pos) = position(lower_c, RUSSIAN_ALPHABET) {
+                let is_upper = c.is_uppercase();
 
-            let key_char =
-                clean_key.chars().nth(i % clean_key.len()).unwrap();
+                let key_char = key_chars[key_index % key_len];
+                let key_lower = key_char.to_lowercase().next().unwrap();
 
-            let key_pos =
-                position(key_char, RUSSIAN_ALPHABET).unwrap() as i32;
+                let key_pos = position(key_lower, RUSSIAN_ALPHABET)
+                    .expect("Ключ содержит только русские буквы");
 
-            let new_pos =
-                (text_pos + key_pos).rem_euclid(RUSSIAN_LEN)
-                    as usize;
+                 println!("Шифруем: '{}' (поз={}) с ключом '{}' (поз={}) -> new_pos={}",
+                    lower_c, pos, key_lower, key_pos,
+                    (pos as i32 + key_pos as i32).rem_euclid(RUSSIAN_LEN));
 
-            let mut new_char =
-                RUSSIAN_ALPHABET.chars().nth(new_pos).unwrap();
+                let new_pos = (pos as i32 + key_pos as i32)
+                    .rem_euclid(RUSSIAN_LEN) as usize;
 
-            if is_upper {
-                new_char =
-                    new_char.to_uppercase().next().unwrap();
+                let mut new_char = RUSSIAN_ALPHABET
+                    .chars()
+                    .nth(new_pos)
+                    .expect("Индекс должен быть в пределах алфавита");
+
+                if is_upper {
+                    new_char = new_char
+                        .to_uppercase()
+                        .next()
+                        .expect("Преобразование в верхний регистр");
+                }
+
+                key_index += 1;
+                new_char
+            } else {
+                c
             }
-
-            new_char
         })
         .collect();
 
     Ok(result)
 }
+
 pub fn decrypt_vigenere_ru(
     text: &str,
     key: &str,
 ) -> Result<String, String> {
-    let filtered = filter_russian(text);
-    let clean_key = filter_russian(key);
+    let clean_key: String = key
+        .chars()
+        .filter(|c| {
+            RUSSIAN_ALPHABET.contains(
+                c.to_lowercase().next().unwrap_or(*c)
+            )
+        })
+        .collect();
 
     if clean_key.is_empty() {
         return Err("Ключ должен содержать русские буквы.".into());
     }
 
-    let result: String = filtered
+    let key_chars: Vec<char> = clean_key.chars().collect();
+    let key_len = key_chars.len();
+    let mut key_index = 0;
+
+    let result: String = text
         .chars()
-        .enumerate()
-        .map(|(i, c)| {
-            let is_upper = c.is_uppercase();
-            let lower = c.to_lowercase().next().unwrap();
+        .map(|c| {
+            let lower_c = c.to_lowercase().next().unwrap();
 
-            let text_pos =
-                position(lower, RUSSIAN_ALPHABET).unwrap() as i32;
+            if let Some(pos) = position(lower_c, RUSSIAN_ALPHABET) {
+                let is_upper = c.is_uppercase();
 
-            let key_char =
-                clean_key.chars().nth(i % clean_key.len()).unwrap();
+                let key_char = key_chars[key_index % key_len];
+                let key_lower = key_char.to_lowercase().next().unwrap();
 
-            let key_pos =
-                position(key_char, RUSSIAN_ALPHABET).unwrap() as i32;
+                let key_pos = position(key_lower, RUSSIAN_ALPHABET)
+                    .expect("Ключ содержит только русские буквы");
 
-            let new_pos =
-                (text_pos - key_pos).rem_euclid(RUSSIAN_LEN)
-                    as usize;
+                 println!("Расшифровываем: '{}' (поз={}) с ключом '{}' (поз={}) -> new_pos={}",
+                    lower_c, pos, key_lower, key_pos,
+                    (pos as i32 - key_pos as i32).rem_euclid(RUSSIAN_LEN));
 
-            let mut new_char =
-                RUSSIAN_ALPHABET.chars().nth(new_pos).unwrap();
+                let new_pos = (pos as i32 - key_pos as i32)
+                    .rem_euclid(RUSSIAN_LEN) as usize;
 
-            if is_upper {
-                new_char =
-                    new_char.to_uppercase().next().unwrap();
+                let mut new_char = RUSSIAN_ALPHABET
+                    .chars()
+                    .nth(new_pos)
+                    .expect("Индекс должен быть в пределах алфавита");
+
+                if is_upper {
+                    new_char = new_char
+                        .to_uppercase()
+                        .next()
+                        .expect("Преобразование в верхний регистр");
+                }
+
+                key_index += 1;
+                new_char
+            } else {
+                c
             }
-
-            new_char
         })
         .collect();
 

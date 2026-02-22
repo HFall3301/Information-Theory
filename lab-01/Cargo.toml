@@ -7,3 +7,12 @@ edition = "2024"
 eframe = "0.33.3"
 egui = "0.33.3"
 rfd = "0.17.2"
+
+[[bin]]
+name = "lab-01"
+path = "src/main.rs"
+
+[profile.release]
+strip = true
+opt-level = 3
+lto = true
