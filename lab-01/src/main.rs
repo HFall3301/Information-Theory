@@ -157,7 +157,7 @@ impl eframe::App for CipherApp {
                             egui::TextEdit::multiline(&mut self.output_text)
                                 .desired_width(f32::INFINITY)
                                 .desired_rows(15)
-                                .interactive(false)
+                                //.interactive(false)
                         );
                     });
 
