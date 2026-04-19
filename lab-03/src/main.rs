@@ -2,6 +2,8 @@ mod algorithms;
 
 use algorithms::{RsaParams, build_rsa_params, decrypt_file, encrypt_file, read_cipher_blocks};
 use eframe::egui;
+use std::fs::File;
+use std::io::{Read, Seek, SeekFrom};
 
 fn main() -> eframe::Result<()> {
     let options = eframe::NativeOptions {
@@ -27,6 +29,9 @@ struct CryptoApp {
     status_message: String,
     cipher_blocks: Vec<u16>,
     last_action: String,
+
+    current_offset: u64,
+    chunk_size: u64,
 }
 
 impl Default for CryptoApp {
@@ -40,8 +45,45 @@ impl Default for CryptoApp {
             status_message: "Готово к работе".to_string(),
             cipher_blocks: Vec::new(),
             last_action: "-".to_string(),
+            current_offset: 0,
+            chunk_size: 256,
         }
     }
+}
+
+fn format_binary_view(data: &[u8]) -> String {
+    if data.is_empty() {
+        return "(пусто)".to_string();
+    }
+
+    let mut result = String::new();
+    for (i, &byte) in data.iter().enumerate() {
+        result.push_str(&format!("{:08b} ", byte));
+
+        if (i + 1) % 4 == 0 && i != data.len() - 1 {
+            result.push('\n');
+        }
+    }
+    result
+}
+
+fn format_cipher_blocks_decimal(blocks: &[u16]) -> String {
+    if blocks.is_empty() {
+        return "(пусто)".to_string();
+    }
+
+    let mut out = String::new();
+    for (i, block) in blocks.iter().enumerate() {
+        out.push_str(&block.to_string());
+        if i + 1 != blocks.len() {
+            if (i + 1) % 12 == 0 {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
+        }
+    }
+    out
 }
 
 impl CryptoApp {
@@ -98,6 +140,8 @@ impl CryptoApp {
             Ok(()) => match read_cipher_blocks(&self.output_path) {
                 Ok(blocks) => {
                     self.cipher_blocks = blocks;
+                    self.current_offset = 0;
+                    self.clamp_offset();
                     self.last_action = "Шифрование".to_string();
                     self.status_message = format!(
                         "Шифрование успешно завершено. Сформировано {} блоков по 16 бит.",
@@ -133,6 +177,8 @@ impl CryptoApp {
         match read_cipher_blocks(&self.input_path) {
             Ok(blocks) => {
                 self.cipher_blocks = blocks;
+                self.current_offset = 0;
+                self.clamp_offset();
             }
             Err(e) => {
                 self.status_message = format!("Ошибка чтения шифротекста: {e}");
@@ -151,34 +197,67 @@ impl CryptoApp {
         }
     }
 
-    fn blocks_as_decimal_text(&self, max_items: usize) -> String {
-        if self.cipher_blocks.is_empty() {
-            return "(нет данных)".to_string();
+    fn data_byte_len(&self) -> u64 {
+        self.cipher_blocks.len() as u64
+    }
+
+    fn plaintext_source_path(&self) -> Option<&str> {
+        match self.last_action.as_str() {
+            "Шифрование" => Some(self.input_path.as_str()),
+            "Расшифрование" => Some(self.output_path.as_str()),
+            _ => None,
+        }
+    }
+
+    fn read_chunk(path: &str, offset: u64, chunk_size: u64) -> Vec<u8> {
+        if !std::path::Path::new(path).exists() {
+            return Vec::new();
         }
 
-        let take_n = self.cipher_blocks.len().min(max_items);
-        let mut out = String::new();
+        let mut buffer = vec![0u8; chunk_size as usize];
+        if let Ok(mut file) = File::open(path) {
+            let file_size = file.metadata().map(|m| m.len()).unwrap_or(0);
+            let actual_offset = offset.min(file_size);
 
-        for (i, block) in self.cipher_blocks.iter().take(take_n).enumerate() {
-            out.push_str(&block.to_string());
-            if i + 1 != take_n {
-                if (i + 1) % 12 == 0 {
-                    out.push('\n');
-                } else {
-                    out.push(' ');
-                }
+            if file.seek(SeekFrom::Start(actual_offset)).is_ok() {
+                let bytes_read = file.read(&mut buffer).unwrap_or(0);
+                buffer.truncate(bytes_read);
+                return buffer;
             }
         }
+        Vec::new()
+    }
 
-        if self.cipher_blocks.len() > max_items {
-            out.push_str(&format!(
-                "\n... показано {} из {} блоков",
-                max_items,
-                self.cipher_blocks.len()
-            ));
+    fn can_display_chunk(&self, offset: u64, data_len: u64) -> bool {
+        if data_len == 0 {
+            return false;
+        }
+        offset < data_len
+    }
+
+    fn clamp_offset(&mut self) {
+        let data_len = self.data_byte_len();
+        if data_len == 0 {
+            self.current_offset = 0;
+            return;
         }
 
-        out
+        let max_offset = data_len.saturating_sub(self.chunk_size);
+        if self.current_offset > max_offset {
+            self.current_offset = max_offset;
+        }
+    }
+
+    fn update_offset_and_views(&mut self, new_offset: u64) {
+        let data_len = self.data_byte_len();
+        if self.can_display_chunk(new_offset, data_len) {
+            self.current_offset = new_offset;
+        } else if data_len > 0 {
+            let last_offset = data_len.saturating_sub(self.chunk_size);
+            if last_offset != self.current_offset {
+                self.current_offset = last_offset;
+            }
+        }
     }
 }
 
@@ -259,13 +338,78 @@ impl eframe::App for CryptoApp {
         });
 
         egui::CentralPanel::default().show(&ctx, |ui| {
-            ui.heading("Шифротекст в десятичной системе (16-битные блоки)");
+            ui.heading("Исходный текст и шифротекст (16-битные блоки, десятичные)");
             ui.label(format!("Всего блоков: {}", self.cipher_blocks.len()));
             ui.separator();
 
-            egui::ScrollArea::vertical().show(ui, |ui| {
-                let text = self.blocks_as_decimal_text(1200);
-                ui.label(egui::RichText::new(text).monospace());
+            let data_len = self.data_byte_len();
+            let avail = data_len.saturating_sub(self.current_offset);
+            let take = self.chunk_size.min(avail);
+
+            let (orig_text, cipher_text) = if data_len == 0 {
+                (
+                    "(нет данных — выполните шифрование или расшифрование)".to_string(),
+                    "(нет данных)".to_string(),
+                )
+            } else {
+                let take_usize = take as usize;
+                let start = self.current_offset as usize;
+                let cipher_slice = &self.cipher_blocks[start..start + take_usize];
+                let cipher_str = format_cipher_blocks_decimal(cipher_slice);
+
+                let orig_str = match self.plaintext_source_path() {
+                    Some(path) => {
+                        let raw = Self::read_chunk(path, self.current_offset, take);
+                        format_binary_view(&raw)
+                    }
+                    None => "(выполните шифрование или расшифрование для сравнения с исходником)"
+                        .to_string(),
+                };
+
+                (orig_str, cipher_str)
+            };
+
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, false])
+                .show(ui, |ui| {
+                    ui.columns(2, |columns| {
+                        columns[0].heading("Исходные байты");
+                        columns[0].label(egui::RichText::new(orig_text).monospace());
+
+                        columns[1].heading("Шифротекст (десятичные блоки)");
+                        columns[1].label(egui::RichText::new(cipher_text).monospace());
+                    });
+                });
+
+            ui.separator();
+
+            ui.horizontal(|ui| {
+                let max_offset = data_len.saturating_sub(self.chunk_size);
+
+                if ui.button("назад").clicked() {
+                    let new_offset = self.current_offset.saturating_sub(self.chunk_size);
+                    self.update_offset_and_views(new_offset);
+                }
+
+                if data_len > self.chunk_size {
+                    let mut offset_f64 = self.current_offset as f64;
+                    if ui
+                        .add(
+                            egui::Slider::new(&mut offset_f64, 0.0..=max_offset as f64)
+                                .text("Смещение (байт)"),
+                        )
+                        .changed()
+                    {
+                        self.update_offset_and_views(offset_f64 as u64);
+                    }
+                } else if data_len > 0 {
+                    ui.label(format!("Размер данных: {} байт", data_len));
+                }
+
+                if ui.button("вперёд").clicked() {
+                    let new_offset = (self.current_offset + self.chunk_size).min(max_offset);
+                    self.update_offset_and_views(new_offset);
+                }
             });
         });
     }
