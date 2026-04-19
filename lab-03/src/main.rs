@@ -51,20 +51,23 @@ impl Default for CryptoApp {
     }
 }
 
-fn format_binary_view(data: &[u8]) -> String {
+fn format_bytes_decimal(data: &[u8]) -> String {
     if data.is_empty() {
         return "(пусто)".to_string();
     }
 
-    let mut result = String::new();
+    let mut out = String::new();
     for (i, &byte) in data.iter().enumerate() {
-        result.push_str(&format!("{:08b} ", byte));
-
-        if (i + 1) % 4 == 0 && i != data.len() - 1 {
-            result.push('\n');
+        out.push_str(&byte.to_string());
+        if i + 1 != data.len() {
+            if (i + 1) % 12 == 0 {
+                out.push('\n');
+            } else {
+                out.push(' ');
+            }
         }
     }
-    result
+    out
 }
 
 fn format_cipher_blocks_decimal(blocks: &[u16]) -> String {
@@ -360,7 +363,7 @@ impl eframe::App for CryptoApp {
                 let orig_str = match self.plaintext_source_path() {
                     Some(path) => {
                         let raw = Self::read_chunk(path, self.current_offset, take);
-                        format_binary_view(&raw)
+                        format_bytes_decimal(&raw)
                     }
                     None => "(выполните шифрование или расшифрование для сравнения с исходником)"
                         .to_string(),
@@ -373,7 +376,7 @@ impl eframe::App for CryptoApp {
                 .auto_shrink([false, false])
                 .show(ui, |ui| {
                     ui.columns(2, |columns| {
-                        columns[0].heading("Исходные байты");
+                        columns[0].heading("Исходные байты (десятичные)");
                         columns[0].label(egui::RichText::new(orig_text).monospace());
 
                         columns[1].heading("Шифротекст (десятичные блоки)");
